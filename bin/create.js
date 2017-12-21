@@ -4,13 +4,12 @@ const cheerio = require('cheerio');
 const camelCase = require('lodash.camelcase');
 const upperFirst = require('lodash.upperfirst');
 const fs = Promise.promisifyAll(require('fs-extra'));
-const {globAsync} = Promise.promisifyAll(require('glob'));
+const { globAsync } = Promise.promisifyAll(require('glob'));
 const svgToJsx = require('@balajmarius/svg-to-jsx');
 const clc = require('cli-color');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const SRC_DIR = path.join(ROOT_DIR, 'src');
-const ILLUSTRATIONS_DIR = path.join(ROOT_DIR, 'illustrations');
 const LIB_DIR = path.join(ROOT_DIR, 'lib');
 
 const readFile = filename => fs.readFileSync(filename, 'utf8');
@@ -28,25 +27,31 @@ const transformSVGToReactComponent = Promise.coroutine(function*(rawSVG, compone
   // Actual output of the React component
   return `
             import React from 'react';
-            import Illustration from './IllustrationBase';
+            import SVGBase from '../SVGBase';
             
             const ${componentName} = props => (
-              <Illustration viewBox="${viewBox}" width="${width}" height="${height}" {...props}>
+              <SVGBase viewBox="${viewBox}" width="${width}" height="${height}" {...props}>
                 ${$svg.html()}
-              </Illustration>
+              </SVGBase>
             );
             
             export default ${componentName};`;
 });
 
-const generateSVGs = Promise.coroutine(function* () {
-  const illustrationsToProcess = yield globAsync(`${ILLUSTRATIONS_DIR}/*`);
-  const illustrations = illustrationsToProcess.map(folder => path.basename(folder));
+const generateSVGs = Promise.coroutine(function*(folder) {
+  const svgsToProcess = yield globAsync(`${SRC_DIR}/${folder}/*.svg`);
+  const svgs = svgsToProcess.map(svg => ({
+    fileName: path.basename(svg),
+    folder: path
+      .dirname(svg)
+      .split(path.sep)
+      .pop(),
+  }));
   let index = '';
 
   yield Promise.all(
-    illustrations.map(
-      Promise.coroutine(function* (fileName) {
+    svgs.map(
+      Promise.coroutine(function*({ fileName, folder }) {
         const dimension = fileName.split('_')[0];
         const width = parseInt(dimension.split('x')[0]);
         const height = parseInt(dimension.split('x')[1]);
@@ -55,14 +60,14 @@ const generateSVGs = Promise.coroutine(function* () {
         const fileNameWithoutDimension = path.basename(fileName.substring(fileName.indexOf('_') + 1), '.svg');
         const variation = fileNameWithoutDimension.split('_').pop();
         const illustrationName = fileNameWithoutDimension.substring(0, fileNameWithoutDimension.lastIndexOf('_'));
-        const illustrationNameWithSize = `illustration_${illustrationName}_${dimension}_${variation}`;
+        const illustrationNameWithSize = `${illustrationName}_${dimension}_${variation}`;
         const componentName = upperFirst(camelCase(`${illustrationNameWithSize}`));
 
-        const rawSVG = readFile(`${ILLUSTRATIONS_DIR}/${fileName}`);
+        const rawSVG = readFile(`${SRC_DIR}${path.sep}${folder}${path.sep}${fileName}`);
         const stringifiedSVGComponent = yield transformSVGToReactComponent(rawSVG, componentName, width, height);
 
         // Write the newly created Component strings to file
-        const filename = path.join(LIB_DIR, `${componentName}.js`);
+        const filename = path.join(LIB_DIR, folder, `${componentName}.js`);
         writeFile(filename, stringifiedSVGComponent);
 
         // Write a simple export index file for easier access
@@ -71,13 +76,17 @@ const generateSVGs = Promise.coroutine(function* () {
     )
   );
 
-  const indexFilename = path.join(LIB_DIR, `index.js`);
+  const indexFilename = path.join(LIB_DIR, folder, `index.js`);
   writeFile(indexFilename, index);
 
-  // Copy other necessary files to LIB_DIR
-  copyFile(SRC_DIR, LIB_DIR);
+  console.log(clc.green(`[Teamleader] 🎉  ${svgs.length} UI ${folder} Svgs generated`));
 
-  console.log(clc.green(`[Teamleader] 🎉  ${illustrations.length} UI Illustrations generated`));
+  // Copy SVGBase.js to LIB_DIR
+  copyFile(path.join(SRC_DIR, 'SVGBase.js'), path.join(LIB_DIR, 'SVGBase.js'));
 });
 
-fs.remove(LIB_DIR).then(generateSVGs);
+const foldersToConvert = ['illustrations'];
+
+fs.remove(LIB_DIR).then(() => {
+  foldersToConvert.forEach(folder => generateSVGs(folder));
+});
