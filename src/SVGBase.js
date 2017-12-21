@@ -1,7 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 
-const IllustrationBase = ({ children, size, style, width, height, ...props }) => {
+const SVGBase = ({ children, size, style, width, height, ...props }) => {
   const computedSize = size || '1em';
   return (
     <svg
@@ -19,11 +19,11 @@ const IllustrationBase = ({ children, size, style, width, height, ...props }) =>
   );
 };
 
-IllustrationBase.propTypes = {
+SVGBase.propTypes = {
   size: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   width: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   height: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   style: PropTypes.object,
 };
 
-export default IllustrationBase;
+export default SVGBase;
